@@ -22,47 +22,6 @@
  */
 #import "CMMachineCell.h"
 
-#import "CMMachine.h"
-
 @implementation CMMachineCell
-
-- (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(NSView *)controlView
-{
-    CMMachine *machine = [self objectValue];
-    
-    [controlView lockFocus];
-    
-    NSColor *textColor;
-    
-    if ([self isHighlighted])
-    {
-        textColor = [NSColor whiteColor];
-    }
-    else
-    {
-        textColor = [machine status] != CMMachineInstalled
-            ? [NSColor disabledControlTextColor] : [NSColor controlTextColor];
-    }
-    
-    NSDictionary *textAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
-                                    [NSFont systemFontOfSize:[NSFont systemFontSize]], NSFontAttributeName,
-                                    textColor, NSForegroundColorAttributeName,
-                                    nil];
-    
-    NSSize textSize = [[machine name] sizeWithAttributes:textAttributes];
-    
-    NSColor *subtextColor = ([self isHighlighted]) ? [NSColor whiteColor] : [NSColor disabledControlTextColor];
-    NSDictionary *subtextAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
-                                       [NSFont systemFontOfSize:[NSFont smallSystemFontSize]], NSFontAttributeName,
-                                       subtextColor, NSForegroundColorAttributeName,
-                                       nil];
-    
-    [[machine name] drawAtPoint:NSMakePoint(cellFrame.origin.x, cellFrame.origin.y)
-                 withAttributes:textAttributes];
-    [[machine systemName] drawAtPoint:NSMakePoint(cellFrame.origin.x, cellFrame.origin.y + textSize.height)
-                       withAttributes:subtextAttributes];
-    
-    [controlView unlockFocus];
-}
 
 @end

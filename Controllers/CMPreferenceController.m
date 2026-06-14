@@ -39,6 +39,7 @@
 #import "CMCocoaInput.h"
 #import "CMKeyCaptureView.h"
 #import "CMHeaderRowCell.h"
+#import "CMMachineCell.h"
 #import "CMMachineSelectionCell.h"
 #import "CMGamepadConfiguration.h"
 
@@ -296,6 +297,8 @@ extern CMEmulatorController *theEmulator;
 	
     [machineScopeBar setSelected:YES forItem:@(machineFamilyFilter) inGroup:SCOPEBAR_GROUP_MACHINE_FAMILY];
     [machineScopeBar setSelected:YES forItem:@(machineStatusFilter) inGroup:SCOPEBAR_GROUP_MACHINE_STATUS];
+
+    [machinesTableView setDelegate:self];
     
     [self sizeWindowToTabContent:[[contentTabView selectedTabViewItem] identifier]];
     
@@ -1264,6 +1267,84 @@ extern CMEmulatorController *theEmulator;
 - (void)tabView:(NSTabView *)tabView didSelectTabViewItem:(NSTabViewItem *)tabViewItem
 {
     [self sizeWindowToTabContent:[tabViewItem identifier]];
+}
+
+#pragma mark - NSTableViewDelegate
+
+- (void)tableView:(NSTableView *)tableView
+  willDisplayCell:(id)cell
+forTableColumn:(NSTableColumn *)tableColumn
+            row:(NSInteger)row
+{
+    if (tableView != machinesTableView)
+        return;
+
+    BOOL selected = [tableView isRowSelected:row];
+    NSBackgroundStyle backgroundStyle = selected ? NSBackgroundStyleEmphasized : NSBackgroundStyleNormal;
+    [cell setBackgroundStyle:backgroundStyle];
+
+    if ([cell isKindOfClass:[CMMachineSelectionCell class]])
+    {
+        [cell setHighlighted:selected];
+        return;
+    }
+
+    if (![cell isKindOfClass:[CMMachineCell class]])
+        return;
+
+    CMMachine *machine = [[machinesArrayController arrangedObjects] objectAtIndex:row];
+    if (![machine isKindOfClass:[CMMachine class]])
+        return;
+
+    NSTextFieldCell *textCell = (NSTextFieldCell *)cell;
+    [textCell setDrawsBackground:NO];
+    [textCell setUsesSingleLineMode:NO];
+    [textCell setScrollable:NO];
+
+    __block NSAttributedString *displayString = nil;
+    [[tableView effectiveAppearance] performAsCurrentDrawingAppearance:^{
+        NSColor *titleColor;
+        NSColor *subtitleColor;
+
+        if (selected)
+        {
+            titleColor = [NSColor alternateSelectedControlTextColor];
+            subtitleColor = titleColor;
+        }
+        else if ([machine status] != CMMachineInstalled)
+        {
+            titleColor = [NSColor tertiaryLabelColor];
+            subtitleColor = titleColor;
+        }
+        else
+        {
+            titleColor = [NSColor labelColor];
+            subtitleColor = [NSColor secondaryLabelColor];
+        }
+
+        NSString *name = [machine name] ?: @"";
+        NSString *system = [machine systemName] ?: @"";
+
+        NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] init];
+        [attr appendAttributedString:[[NSAttributedString alloc] initWithString:name
+                                                                    attributes:@{
+            NSFontAttributeName: [NSFont systemFontOfSize:[NSFont systemFontSize]],
+            NSForegroundColorAttributeName: titleColor,
+        }]];
+
+        if ([system length] > 0)
+        {
+            [attr appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"\n%@", system]
+                                                                        attributes:@{
+                NSFontAttributeName: [NSFont systemFontOfSize:[NSFont smallSystemFontSize]],
+                NSForegroundColorAttributeName: subtitleColor,
+            }]];
+        }
+
+        displayString = attr;
+    }];
+
+    [textCell setAttributedStringValue:displayString];
 }
 
 #pragma mark - NSOutlineViewDataSourceDelegate
