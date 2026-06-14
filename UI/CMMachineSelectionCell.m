@@ -49,32 +49,31 @@ static BOOL CMIsDarkAppearance(NSView *view)
         [super drawInteriorWithFrame:cellFrame inView:controlView];
     }];
 
-    if ([self downloadingIconVisible])
-    {
-        BOOL isHighlighted = [self isRowHighlightedInView:controlView frame:cellFrame];
-        NSImage *downloadIcon;
+    if (![self downloadingIconVisible])
+        return;
 
-        if (isHighlighted || CMIsDarkAppearance(controlView))
-            downloadIcon = [NSImage imageNamed:@"icon-downloading-inverse"];
-        else
-            downloadIcon = [NSImage imageNamed:@"icon-downloading"];
+    BOOL isHighlighted = [self isRowHighlightedInView:controlView frame:cellFrame];
+    NSImage *downloadIcon;
 
-        [[controlView effectiveAppearance] performAsCurrentDrawingAppearance:^{
-            [controlView lockFocus];
+    if (isHighlighted || CMIsDarkAppearance(controlView))
+        downloadIcon = [NSImage imageNamed:@"icon-downloading-inverse"];
+    else
+        downloadIcon = [NSImage imageNamed:@"icon-downloading"];
 
-            [downloadIcon drawInRect:NSMakeRect(cellFrame.origin.x + (cellFrame.size.width - downloadIcon.size.width) / 2.0,
-                                                cellFrame.origin.y + (cellFrame.size.height - downloadIcon.size.height) / 2.0,
-                                                downloadIcon.size.width,
-                                                downloadIcon.size.height)
-                            fromRect:NSMakeRect(0, 0, downloadIcon.size.width, downloadIcon.size.height)
-                           operation:NSCompositeSourceOver
-                            fraction:1.0
-                      respectFlipped:YES
-                               hints:nil];
+    if (!downloadIcon)
+        return;
 
-            [controlView unlockFocus];
-        }];
-    }
+    [[controlView effectiveAppearance] performAsCurrentDrawingAppearance:^{
+        [downloadIcon drawInRect:NSMakeRect(cellFrame.origin.x + (cellFrame.size.width - downloadIcon.size.width) / 2.0,
+                                          cellFrame.origin.y + (cellFrame.size.height - downloadIcon.size.height) / 2.0,
+                                          downloadIcon.size.width,
+                                          downloadIcon.size.height)
+                        fromRect:NSMakeRect(0, 0, downloadIcon.size.width, downloadIcon.size.height)
+                       operation:NSCompositeSourceOver
+                        fraction:1.0
+                  respectFlipped:YES
+                           hints:nil];
+    }];
 }
 
 @end

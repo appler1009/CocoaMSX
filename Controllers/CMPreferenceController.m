@@ -137,6 +137,7 @@ static NSArray *keysInOrderOfAppearance;
 - (void)requestMachineFeedUpdate;
 - (BOOL)updateMachineFeed:(NSError **)error;
 - (BOOL)isDownloadQueuedForMachine:(CMMachine *)machine;
+- (void)activateMachineIfInstalled:(CMMachine *)machine;
 
 - (NSArray *)machinesAvailableForDownload;
 - (void)synchronizeMachineArrayController;
@@ -299,6 +300,11 @@ extern CMEmulatorController *theEmulator;
     [machineScopeBar setSelected:YES forItem:@(machineStatusFilter) inGroup:SCOPEBAR_GROUP_MACHINE_STATUS];
 
     [machinesTableView setDelegate:self];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(machineTableSelectionDidChange:)
+                                                 name:NSTableViewSelectionDidChangeNotification
+                                               object:machinesTableView];
     
     [self sizeWindowToTabContent:[[contentTabView selectedTabViewItem] identifier]];
     
@@ -330,6 +336,9 @@ extern CMEmulatorController *theEmulator;
     [[NSNotificationCenter defaultCenter] removeObserver:self
                                                     name:CMInstallErrorNotification
                                                   object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:NSTableViewSelectionDidChangeNotification
+                                                  object:machinesTableView];
 }
 
 #pragma mark - Private Methods
@@ -792,6 +801,50 @@ extern CMEmulatorController *theEmulator;
     return machineFound;
 }
 
+- (void)activateMachineIfInstalled:(CMMachine *)machine
+{
+    if (!machine || [machine status] != CMMachineInstalled)
+        return;
+
+    for (CMMachine *other in [machinesArrayController content])
+    {
+        if (other != machine && [other active])
+            [other setActive:NO];
+    }
+
+    if (![machine active])
+        [machine setActive:YES];
+
+    [self setActiveMachine:machine];
+    [machinesTableView reloadData];
+}
+
+- (IBAction)machineActiveRadioClicked:(id)sender
+{
+    NSInteger row = [machinesTableView clickedRow];
+    if (row < 0)
+        return;
+
+    NSArray *machines = [machinesArrayController arrangedObjects];
+    if (row >= (NSInteger)[machines count])
+        return;
+
+    [self activateMachineIfInstalled:[machines objectAtIndex:row]];
+}
+
+- (void)machineTableSelectionDidChange:(NSNotification *)notification
+{
+    NSInteger row = [machinesTableView selectedRow];
+    if (row < 0)
+        return;
+
+    NSArray *machines = [machinesArrayController arrangedObjects];
+    if (row >= (NSInteger)[machines count])
+        return;
+
+    [self activateMachineIfInstalled:[machines objectAtIndex:row]];
+}
+
 - (void)sizeWindowToTabContent:(NSString *)tabId
 {
     NSRect contentFrame = [[self window] contentRectForFrameRect:[[self window] frame]];
@@ -1095,7 +1148,7 @@ extern CMEmulatorController *theEmulator;
         // deactivate all except the one active
         
         NSString *active = CMGetObjPref(@"machineConfiguration");
-        [_machines enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop)
+        [[machinesArrayController content] enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop)
         {
             BOOL matchesActive = [[obj machineId] isEqualToString:active];
             if (!matchesActive && [obj active])
@@ -1285,7 +1338,50 @@ forTableColumn:(NSTableColumn *)tableColumn
 
     if ([cell isKindOfClass:[CMMachineSelectionCell class]])
     {
-        [cell setHighlighted:selected];
+        NSArray *machines = [machinesArrayController arrangedObjects];
+        if (row >= (NSInteger)[machines count])
+            return;
+
+        CMMachine *machine = [machines objectAtIndex:row];
+        NSButtonCell *buttonCell = (NSButtonCell *)cell;
+        CMMachineSelectionCell *selectionCell = (CMMachineSelectionCell *)cell;
+
+        [buttonCell setHighlighted:selected];
+        [buttonCell setBackgroundStyle:backgroundStyle];
+        [buttonCell setTarget:self];
+        [buttonCell setAction:@selector(machineActiveRadioClicked:)];
+        [buttonCell setAlignment:NSCenterTextAlignment];
+        [buttonCell setImage:nil];
+        [buttonCell setImagePosition:NSNoImage];
+        [buttonCell setEnabled:[machine status] == CMMachineInstalled];
+
+        if ([machine status] == CMMachineDownloading)
+        {
+            [selectionCell setDownloadingIconVisible:YES];
+            [buttonCell setTitle:@""];
+            return;
+        }
+
+        [selectionCell setDownloadingIconVisible:NO];
+
+        NSString *indicator = @"";
+        if ([machine status] == CMMachineInstalled)
+            indicator = [machine active] ? @"✓" : @"○";
+
+        NSColor *indicatorColor;
+        if (selected)
+            indicatorColor = [NSColor alternateSelectedControlTextColor];
+        else if ([machine active])
+            indicatorColor = [NSColor controlAccentColor];
+        else
+            indicatorColor = [NSColor secondaryLabelColor];
+
+        NSDictionary *attributes = @{
+            NSFontAttributeName: [NSFont boldSystemFontOfSize:15],
+            NSForegroundColorAttributeName: indicatorColor,
+        };
+        [buttonCell setAttributedTitle:[[NSAttributedString alloc] initWithString:indicator
+                                                                       attributes:attributes]];
         return;
     }
 
