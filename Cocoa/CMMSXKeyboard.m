@@ -38,6 +38,7 @@
 @property (nonatomic, strong) NSString *shiftChar;
 
 - (NSString *)presentationLabelForState:(CMMSXKeyState)keyState;
+- (NSString *)fullPresentationLabel;
 - (NSString *)charForState:(CMMSXKeyState)keyState;
 - (BOOL)availableForState:(CMMSXKeyState)keyState;
 
@@ -67,6 +68,24 @@
         return [self label];
     
     return [self charForState:keyState];
+}
+
+- (NSString *)fullPresentationLabel
+{
+    if ([self label])
+        return [self label];
+
+    NSString *defaultChar = [self defaultChar];
+    NSString *shiftChar = [self shiftChar];
+
+    if (defaultChar && shiftChar && ![defaultChar isEqualToString:shiftChar])
+        return [NSString stringWithFormat:@"%@ / %@", defaultChar, shiftChar];
+    if (shiftChar)
+        return shiftChar;
+    if (defaultChar)
+        return defaultChar;
+
+    return nil;
 }
 
 - (NSString *)charForState:(CMMSXKeyState)keyState
@@ -282,6 +301,12 @@ static NSMutableDictionary *virtualCodeToCategoryMap;
 {
     CMMSXKey *msxKey = [virtualCodeToKeyInfoMap objectForKey:@(keyCode)];
     return [msxKey presentationLabelForState:keyState];
+}
+
+- (NSString *)fullPresentationLabelForVirtualCode:(NSInteger)keyCode
+{
+    CMMSXKey *msxKey = [virtualCodeToKeyInfoMap objectForKey:@(keyCode)];
+    return [msxKey fullPresentationLabel];
 }
 
 - (BOOL)supportsVirtualCode:(NSInteger)keyCode

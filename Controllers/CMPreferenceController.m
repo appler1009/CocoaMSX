@@ -22,6 +22,8 @@
  */
 #import "CMPreferenceController.h"
 
+#import <AppKit/NSEvent.h>
+
 #import "CMAppDelegate.h"
 #import "CMEmulatorController.h"
 #import "CMConfigureJoystickController.h"
@@ -38,6 +40,7 @@
 
 #import "CMCocoaInput.h"
 #import "CMKeyCaptureView.h"
+#import "CMMacKeyboardLayout.h"
 #import "CMHeaderRowCell.h"
 #import "CMMachineCell.h"
 #import "CMMachineSelectionCell.h"
@@ -114,6 +117,7 @@ static NSArray *keysInOrderOfAppearance;
 
 #define SCOPEBAR_GROUP_SHIFTED 0
 #define SCOPEBAR_GROUP_REGIONS 1
+#define SCOPEBAR_GROUP_MAC_LAYOUT 2
 
 #define SCOPEBAR_GROUP_MACHINE_STATUS 0
 #define SCOPEBAR_GROUP_MACHINE_FAMILY 1
@@ -173,6 +177,7 @@ static NSArray<NSString *> *sharedUserDefaultsToObserve;
 	NSArray *virtualEmulationSpeedRange;
 	
 	NSString *selectedKeyboardRegion;
+	NSString *selectedMacKeyboardLayout;
 	NSInteger selectedKeyboardShiftState;
 	
 	NSOperationQueue *downloadQueue;
@@ -267,6 +272,8 @@ extern CMEmulatorController *theEmulator;
     // Scope Bar
     [keyboardScopeBar setSelected:YES forItem:@(CMMSXKeyStateDefault)  inGroup:SCOPEBAR_GROUP_SHIFTED];
     [keyboardScopeBar setSelected:YES forItem:[CMMSXKeyboard defaultLayoutName] inGroup:SCOPEBAR_GROUP_REGIONS];
+    selectedMacKeyboardLayout = [CMMacKeyboardLayout effectiveLayoutIdentifier];
+    [keyboardScopeBar setSelected:YES forItem:selectedMacKeyboardLayout inGroup:SCOPEBAR_GROUP_MAC_LAYOUT];
     
     [self synchronizeSettings];
     
@@ -1051,9 +1058,11 @@ extern CMEmulatorController *theEmulator;
 {
     CMInputDeviceLayout *layout = theEmulator.keyboardLayout;
     
-    [layout loadLayout:[[CMPreferences preferences] defaultKeyboardLayout]];
+    [layout loadLayout:[[CMPreferences preferences] defaultKeyboardLayoutForMacLayout:selectedMacKeyboardLayout]];
     [[CMPreferences preferences] setKeyboardLayout:layout];
     
+    [self initializeInputDeviceCategories:keyCategories
+                                 withLayout:layout];
     [keyboardLayoutEditor reloadData];
 }
 
@@ -1489,15 +1498,28 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
         if ([[tableColumn identifier] isEqualToString:@"CMKeyLabelColumn"]) {
 			CMMSXKeyboard *keyboard = [CMMSXKeyboard keyboardWithLayoutName:selectedKeyboardRegion];
 			if (keyboard) {
-				NSString *label = [keyboard presentationLabelForVirtualCode:virtualCode
-																   keyState:selectedKeyboardShiftState];
+				NSString *label = [keyboard fullPresentationLabelForVirtualCode:virtualCode];
+				if (!label)
+					label = [keyboard presentationLabelForVirtualCode:virtualCode
+															   keyState:selectedKeyboardShiftState];
 				return label ? label : CMLoc(@"Unavailable", @"");
 			}
 			
             return nil;
         } else if ([[tableColumn identifier] isEqualToString:@"CMKeyAssignmentColumn"]) {
             CMKeyboardInput *keyInput = (CMKeyboardInput *)[[theEmulator keyboardLayout] inputMethodForVirtualCode:virtualCode];
-            return [CMKeyCaptureView descriptionForKeyCode:[keyInput keyCode]];
+            if (!keyInput || [keyInput keyCode] == CMKeyNoCode)
+                return @"";
+
+            NSString *keyName = [CMKeyCaptureView descriptionForKeyCode:[keyInput keyCode]];
+            NSUInteger macModifiers = selectedKeyboardShiftState == CMMSXKeyStateShift ? NSEventModifierFlagShift : 0;
+            NSString *macLayout = selectedMacKeyboardLayout ?: [CMMacKeyboardLayout effectiveLayoutIdentifier];
+            NSString *macChar = [CMMacKeyboardLayout displayLabelForKeyCode:[keyInput keyCode]
+                                                                   modifiers:macModifiers
+                                                          layoutIdentifier:macLayout];
+            if ([macChar length] > 0 && [keyName length] > 0 && ![macChar isEqualToString:keyName])
+                return [NSString stringWithFormat:@"%@ (%@)", keyName, macChar];
+            return keyName;
         }
     }
     
@@ -1579,7 +1601,7 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
 - (int)numberOfGroupsInScopeBar:(MGScopeBar *)theScopeBar
 {
     if (theScopeBar == keyboardScopeBar)
-        return 2;
+        return 3;
     
     if (theScopeBar == machineScopeBar)
         return 2;
@@ -1600,6 +1622,10 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
         else if (groupNumber == SCOPEBAR_GROUP_REGIONS)
         {
             return [CMMSXKeyboard availableLayoutNames];
+        }
+        else if (groupNumber == SCOPEBAR_GROUP_MAC_LAYOUT)
+        {
+            return [CMMacKeyboardLayout availableLayoutIdentifiers];
         }
     }
     else if (theScopeBar == machineScopeBar)
@@ -1626,7 +1652,9 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
     if (theScopeBar == keyboardScopeBar)
     {
         if (groupNumber == SCOPEBAR_GROUP_REGIONS)
-            return CMLoc(@"Layout", @"");
+            return CMLoc(@"MSX", @"MSX keyboard layout");
+        if (groupNumber == SCOPEBAR_GROUP_MAC_LAYOUT)
+            return CMLoc(@"Mac", @"Mac keyboard layout");
     }
     
     return nil;
@@ -1653,6 +1681,10 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
         else if (groupNumber == SCOPEBAR_GROUP_REGIONS)
         {
             return [[CMMSXKeyboard keyboardWithLayoutName:identifier] label];
+        }
+        else if (groupNumber == SCOPEBAR_GROUP_MAC_LAYOUT)
+        {
+            return [CMMacKeyboardLayout labelForLayoutIdentifier:identifier];
         }
     }
     else if (theScopeBar == machineScopeBar)
@@ -1701,6 +1733,12 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
         {
             selectedKeyboardRegion = identifier;
             
+            [keyboardLayoutEditor reloadData];
+        }
+        else if (groupNumber == SCOPEBAR_GROUP_MAC_LAYOUT)
+        {
+            selectedMacKeyboardLayout = identifier;
+            [[NSUserDefaults standardUserDefaults] setObject:identifier forKey:CMMacKeyboardLayoutPrefKey];
             [keyboardLayoutEditor reloadData];
         }
     }

@@ -30,6 +30,8 @@
 
 #import "CMGamepadConfiguration.h"
 #import "CMEmulatorController.h"
+#import "CMMSXKeyboard.h"
+#import "CMMacKeyboardLayout.h"
 
 #include "Board.h"
 #include "InputEvent.h"
@@ -103,6 +105,8 @@ NSString *const CMKeyPasteEnded   = @"com.akop.CocoaMSX.KeyPasteEnded";
 - (void)removeLocalKeyboardMonitor;
 - (BOOL)shouldCaptureKeyboardEvents;
 - (void)processLocalKeyboardEvent:(NSEvent *)event;
+- (BOOL)handleCharacterBasedKeyEvent:(NSEvent *)event;
+- (NSString *)msxKeyboardLayoutName;
 - (NSEventModifierFlags)modifierFlagsForKeyCode:(NSUInteger)keyCode;
 - (NSInteger) virtualCodeMappedTo:(NSInteger) code
 					configuration:(CMGamepadConfiguration *) config
@@ -124,6 +128,7 @@ static NSArray<NSString *> *defaultsToObserve;
 	
 	NSInteger preferredDevices[2];
 	NSMutableDictionary<NSNumber *, CMGamepadConfiguration *> *joypadConfigurations;
+	NSMutableDictionary<NSNumber *, NSNumber *> *characterMappedVirtualCodes;
 	id localKeyboardMonitor;
 }
 
@@ -144,6 +149,7 @@ static NSArray<NSString *> *defaultsToObserve;
     {
         keysToPaste = [[NSMutableArray alloc] init];
         joypadConfigurations = [[NSMutableDictionary alloc] init];
+        characterMappedVirtualCodes = [[NSMutableDictionary alloc] init];
         timeOfAutoPress = 0;
 		pasteIndex = 0;
         
@@ -268,6 +274,7 @@ static NSArray<NSString *> *defaultsToObserve;
 - (void)releaseAllKeys
 {
     virtualCodeClear();
+	[characterMappedVirtualCodes removeAllObjects];
 }
 
 - (void)resetState
@@ -336,6 +343,63 @@ static NSArray<NSString *> *defaultsToObserve;
     }
 }
 
+- (NSString *)msxKeyboardLayoutName
+{
+    NSString *machineId = [theEmulator isStarted] ? [theEmulator runningMachineConfiguration]
+                                                    : [theEmulator currentMachineConfiguration];
+    NSString *layoutName = [CMMSXKeyboard layoutNameOfMachineWithIdentifier:machineId];
+    return layoutName ?: [CMMSXKeyboard defaultLayoutName];
+}
+
+- (BOOL)handleCharacterBasedKeyEvent:(NSEvent *)event
+{
+    if ([event type] != NSEventTypeKeyDown && [event type] != NSEventTypeKeyUp)
+        return NO;
+
+    NSUInteger keyCode = [event keyCode];
+    if (![CMMacKeyboardLayout isCharacterMappingPreferredForKeyCode:keyCode])
+        return NO;
+
+    if (([event modifierFlags] & NSEventModifierFlagCommand) != 0)
+        return YES;
+
+    NSString *macLayout = [CMMacKeyboardLayout effectiveLayoutIdentifier];
+    NSString *character = [CMMacKeyboardLayout characterForKeyCode:keyCode
+                                                       modifiers:[event modifierFlags]
+                                              layoutIdentifier:macLayout];
+    if (!character || [character length] == 0)
+        return NO;
+
+    CMMSXKeyboard *msxKeyboard = [CMMSXKeyboard keyboardWithLayoutName:[self msxKeyboardLayoutName]];
+    CMMSXKeyCombination *combination = [msxKeyboard keyCombinationForCharacter:character];
+    if (!combination)
+        return NO;
+
+    BOOL isDown = ([event type] == NSEventTypeKeyDown);
+    NSInteger virtualCode = [combination virtualCode];
+
+    if (isDown)
+    {
+        [characterMappedVirtualCodes setObject:@(virtualCode) forKey:@(keyCode)];
+        virtualCodeSet(virtualCode);
+    }
+    else
+    {
+        NSNumber *mappedCode = [characterMappedVirtualCodes objectForKey:@(keyCode)];
+        if (mappedCode)
+        {
+            virtualCodeUnset([mappedCode integerValue]);
+            [characterMappedVirtualCodes removeObjectForKey:@(keyCode)];
+        }
+        else
+        {
+            virtualCodeUnset(virtualCode);
+        }
+    }
+
+    return YES;
+}
+
 - (void)processLocalKeyboardEvent:(NSEvent *)event
 {
     if (![self shouldCaptureKeyboardEvents])
@@ -356,6 +420,9 @@ static NSArray<NSString *> *defaultsToObserve;
         return;
 
     if (([event modifierFlags] & NSEventModifierFlagCommand) != 0 && [event type] == NSEventTypeKeyDown)
+        return;
+
+    if ([self handleCharacterBasedKeyEvent:event])
         return;
 
     [self handleKeyEvent:[event keyCode]

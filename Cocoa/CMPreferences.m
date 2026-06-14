@@ -23,10 +23,12 @@
 #import "CMPreferences.h"
 
 #import "CMInputDeviceLayout.h"
+#import "CMMacKeyboardLayout.h"
 
 #import "NSString+CMExtensions.h"
 
 static NSString * const CMKeyboardLayoutPrefKey = @"msxKeyboardLayout";
+static NSString * const CMKeyboardLayoutCanadianPrefKey = @"msxKeyboardLayoutCanadian";
 static NSString * const CMJoystickOneLayoutPrefKey = @"msxJoystickOneLayout";
 static NSString * const CMJoystickTwoLayoutPrefKey = @"msxJoystickTwoLayout";
 
@@ -122,10 +124,19 @@ static CMPreferences *preferences = nil;
 
 - (CMInputDeviceLayout *)defaultKeyboardLayout;
 {
+    return [self defaultKeyboardLayoutForMacLayout:[CMMacKeyboardLayout effectiveLayoutIdentifier]];
+}
+
+- (CMInputDeviceLayout *)defaultKeyboardLayoutForMacLayout:(NSString *)macLayoutIdentifier;
+{
     NSString *bundleResourcePath = [[NSBundle mainBundle] pathForResource:@"Defaults" ofType:@"plist"];
     NSDictionary *defaults = [NSDictionary dictionaryWithContentsOfFile:bundleResourcePath];
     
-    NSData *layoutData = [defaults objectForKey:CMKeyboardLayoutPrefKey];
+    NSString *prefKey = CMKeyboardLayoutPrefKey;
+    if ([macLayoutIdentifier isEqualToString:CMMacKeyboardLayoutCanadianIdentifier])
+        prefKey = CMKeyboardLayoutCanadianPrefKey;
+    
+    NSData *layoutData = [defaults objectForKey:prefKey] ?: [defaults objectForKey:CMKeyboardLayoutPrefKey];
     return [NSKeyedUnarchiver unarchiveObjectWithData:layoutData];
 }
 
