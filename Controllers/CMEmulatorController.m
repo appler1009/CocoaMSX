@@ -3001,21 +3001,14 @@ void archTrap(UInt8 value)
 
 - (void) togglePresentationOptions
 {
-	NSApplicationPresentationOptions options = [NSApp presentationOptions];
-	if (!(options & NSApplicationPresentationAutoHideDock) && !(options & NSApplicationPresentationHideDock)) {
-		options |= NSApplicationPresentationAutoHideDock;
-	}
-	
-	if ([[self window] isKeyWindow]) {
-		options |= NSApplicationPresentationDisableProcessSwitching;
-		NSLog(@"EmulatorController: disabling process switching");
-	} else {
-		options &= ~NSApplicationPresentationDisableProcessSwitching;
-		NSLog(@"EmulatorController: enabling process switching");
-	}
-	
+	// Do not set NSApplicationPresentationDisableProcessSwitching while the
+	// emulator is focused. Apple's kiosk docs state that flag disables all
+	// Exposé functionality, including Mission Control and Spaces gestures.
+	if ([[self window] isKeyWindow])
+		return;
+
 	@try {
-		[NSApp setPresentationOptions:options];
+		[NSApp setPresentationOptions:NSApplicationPresentationDefault];
 	}
 	@catch(NSException * exception) {
 		NSLog(@"[NSApp setPresentationOptions] failed");
