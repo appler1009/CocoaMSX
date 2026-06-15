@@ -1,3 +1,6 @@
 CocoaMSX.xcodeproj/xcuserdata
 CocoaMSX.xcodeproj/project.xcworkspace
 .DS_Store
+
+# Local-only notes (not for upstream)
+docs/local-*
