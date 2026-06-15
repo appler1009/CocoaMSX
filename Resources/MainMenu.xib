@@ -331,13 +331,13 @@
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="1052"/>
                             <menuItem title="Take Screenshot" keyEquivalent="3" id="1053">
-                                <modifierMask key="keyEquivalentModifierMask" control="YES" command="YES"/>
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
                                 <connections>
                                     <action selector="saveScreenshot:" target="-1" id="3X8-Sg-fn1"/>
                                 </connections>
                             </menuItem>
-                            <menuItem title="Save Screenshot As..." alternate="YES" keyEquivalent="3" id="SR0-ak-ccl">
-                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                            <menuItem title="Save Screenshot As..." keyEquivalent="3" id="SR0-ak-ccl">
+                                <modifierMask key="keyEquivalentModifierMask" control="YES" command="YES"/>
                                 <connections>
                                     <action selector="saveScreenshotAs:" target="-1" id="aSA-0e-rg1"/>
                                 </connections>

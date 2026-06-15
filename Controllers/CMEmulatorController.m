@@ -104,6 +104,11 @@
                    allowedFileTypes:(NSArray*)allowedFileTypes
                     openInDirectory:(NSString*)initialDirectory
                   completionHandler:(void (^)(NSString *file, NSString *path))handler;
+- (void)showSaveFileDialogWithTitle:(NSString*)title
+                   allowedFileTypes:(NSArray*)allowedFileTypes
+                    openInDirectory:(NSString*)initialDirectory
+                    defaultFilename:(NSString*)defaultFilename
+                  completionHandler:(void (^)(NSString *file, NSString *path))handler;
 
 - (void) startWithState:(NSString *) state;
 
@@ -1172,12 +1177,26 @@ CMEmulatorController *theEmulator = nil; // FIXME
     [self showSaveFileDialogWithTitle:title
                      allowedFileTypes:allowedFileTypes
                       openInDirectory:nil
+                      defaultFilename:nil
                     completionHandler:handler];
 }
 
 - (void)showSaveFileDialogWithTitle:(NSString*)title
                    allowedFileTypes:(NSArray*)allowedFileTypes
                     openInDirectory:(NSString*)initialDirectory
+                  completionHandler:(void (^)(NSString *file, NSString *path))handler
+{
+    [self showSaveFileDialogWithTitle:title
+                     allowedFileTypes:allowedFileTypes
+                      openInDirectory:initialDirectory
+                      defaultFilename:nil
+                    completionHandler:handler];
+}
+
+- (void)showSaveFileDialogWithTitle:(NSString*)title
+                   allowedFileTypes:(NSArray*)allowedFileTypes
+                    openInDirectory:(NSString*)initialDirectory
+                    defaultFilename:(NSString*)defaultFilename
                   completionHandler:(void (^)(NSString *file, NSString *path))handler
 {
     NSSavePanel *dialog = [NSSavePanel savePanel];
@@ -1188,6 +1207,9 @@ CMEmulatorController *theEmulator = nil; // FIXME
     
     if (initialDirectory)
         dialog.directoryURL = [NSURL fileURLWithPath:initialDirectory];
+    
+    if (defaultFilename.length > 0)
+        dialog.nameFieldStringValue = defaultFilename;
     
     [dialog beginSheetModalForWindow:[self activeWindow]
                    completionHandler:^(NSInteger result)
@@ -2396,8 +2418,15 @@ CMEmulatorController *theEmulator = nil; // FIXME
     
     emulatorSuspend();
     
+    NSString *desktopPath = [NSSearchPathForDirectoriesInDomains(NSDesktopDirectory, NSUserDomainMask, YES) firstObject];
+    NSString *defaultPath = [self generateTimestampedFilenameAtPath:desktopPath
+                                                           template:NSLocalizedString(@"ScreenshotFilenameFormat", @"")
+                                                          extension:@"png"];
+    
     [self showSaveFileDialogWithTitle:CMLoc(@"Save Screenshot", @"Dialog title")
                      allowedFileTypes:[NSArray arrayWithObjects:@"png", nil]
+                      openInDirectory:desktopPath
+                      defaultFilename:[defaultPath lastPathComponent]
                     completionHandler:^(NSString *file, NSString *path)
      {
          if (file)
