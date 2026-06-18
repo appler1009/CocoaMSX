@@ -2,5 +2,8 @@ CocoaMSX.xcodeproj/xcuserdata
 CocoaMSX.xcodeproj/project.xcworkspace
 .DS_Store
 
+# Local release builds (see scripts/build-local-release.sh)
+/build/
+
 # Local-only notes (not for upstream)
 docs/local-*
