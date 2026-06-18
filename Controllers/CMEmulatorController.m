@@ -68,6 +68,8 @@
 #define LED_CASSETTE  0x100
 #define LED_POWER     0x200
 
+static const NSInteger kCMPersistedFloppyDriveCount = 2;
+
 @interface CMEmulatorController ()
 
 - (CMAppDelegate *)theApp;
@@ -130,6 +132,8 @@
                     slot:(NSInteger)slot
           mountFoldersRw:(BOOL)mountFoldersRw;
 - (void)ejectDiskFromSlot:(NSInteger)slot;
+- (void)persistDiskForSlot:(NSInteger)slot;
+- (void)restorePersistedDiskPaths;
 - (BOOL)toggleEjectDiskMenuItemStatus:(NSMenuItem*)menuItem
                                  slot:(NSInteger)slot;
 
@@ -558,6 +562,8 @@ CMEmulatorController *theEmulator = nil; // FIXME
                               properties->media.carts[i].fileNameInZip);
     }
     
+    [self restorePersistedDiskPaths];
+
     for (int i = 0; i < PROP_MAX_DISKS; i++)
     {
         if (properties->media.disks[i].fileName[0])
@@ -1515,6 +1521,8 @@ CMEmulatorController *theEmulator = nil; // FIXME
         [self setLastLoadedState:nil];
         [self setLastSavedState:nil];
     }
+
+    [self persistDiskForSlot:slot];
 }
 
 - (void)createBlankDiskAndInsertIntoSlot:(int)slot
@@ -1604,13 +1612,70 @@ CMEmulatorController *theEmulator = nil; // FIXME
 - (void)ejectDiskFromSlot:(NSInteger)slot
 {
     actionDiskRemove(slot);
-	
+    [self persistDiskForSlot:slot];
+
     // If the user is ejecting a disk from the first slot, reset last used
     // state names
     if (slot == 0)
     {
         [self setLastLoadedState:nil];
         [self setLastSavedState:nil];
+    }
+}
+
+- (NSString *)persistedDiskPathKeyForSlot:(NSInteger)slot
+{
+    return [NSString stringWithFormat:@"persistedDisk%ldPath", (long)slot];
+}
+
+- (NSString *)persistedDiskPathInZipKeyForSlot:(NSInteger)slot
+{
+    return [NSString stringWithFormat:@"persistedDisk%ldPathInZip", (long)slot];
+}
+
+- (void)persistDiskForSlot:(NSInteger)slot
+{
+    if (slot < 0 || slot >= kCMPersistedFloppyDriveCount || !properties)
+        return;
+
+    NSString *pathKey = [self persistedDiskPathKeyForSlot:slot];
+    NSString *zipKey = [self persistedDiskPathInZipKeyForSlot:slot];
+    FileProperties *disk = &properties->media.disks[slot];
+
+    if (disk->fileName[0]) {
+        CMSetObjPref(pathKey, @(disk->fileName));
+        if (disk->fileNameInZip[0])
+            CMSetObjPref(zipKey, @(disk->fileNameInZip));
+        else
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:zipKey];
+    } else {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:pathKey];
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:zipKey];
+    }
+}
+
+- (void)restorePersistedDiskPaths
+{
+    if (!properties)
+        return;
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    for (NSInteger slot = 0; slot < kCMPersistedFloppyDriveCount; slot++) {
+        if (properties->media.disks[slot].fileName[0])
+            continue;
+
+        NSString *path = CMGetObjPref([self persistedDiskPathKeyForSlot:slot]);
+        if (![path isKindOfClass:[NSString class]] || path.length == 0)
+            continue;
+        if (![fm fileExistsAtPath:path])
+            continue;
+
+        strcpy(properties->media.disks[slot].fileName, [path UTF8String]);
+
+        NSString *pathInZip = CMGetObjPref([self persistedDiskPathInZipKeyForSlot:slot]);
+        if ([pathInZip isKindOfClass:[NSString class]] && pathInZip.length > 0)
+            strcpy(properties->media.disks[slot].fileNameInZip, [pathInZip UTF8String]);
     }
 }
 
