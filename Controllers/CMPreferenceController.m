@@ -22,6 +22,8 @@
  */
 #import "CMPreferenceController.h"
 
+#import <AppKit/NSEvent.h>
+
 #import "CMAppDelegate.h"
 #import "CMEmulatorController.h"
 #import "CMConfigureJoystickController.h"
@@ -38,7 +40,9 @@
 
 #import "CMCocoaInput.h"
 #import "CMKeyCaptureView.h"
+#import "CMMacKeyboardLayout.h"
 #import "CMHeaderRowCell.h"
+#import "CMMachineCell.h"
 #import "CMMachineSelectionCell.h"
 #import "CMGamepadConfiguration.h"
 
@@ -113,6 +117,7 @@ static NSArray *keysInOrderOfAppearance;
 
 #define SCOPEBAR_GROUP_SHIFTED 0
 #define SCOPEBAR_GROUP_REGIONS 1
+#define SCOPEBAR_GROUP_MAC_LAYOUT 2
 
 #define SCOPEBAR_GROUP_MACHINE_STATUS 0
 #define SCOPEBAR_GROUP_MACHINE_FAMILY 1
@@ -136,6 +141,7 @@ static NSArray *keysInOrderOfAppearance;
 - (void)requestMachineFeedUpdate;
 - (BOOL)updateMachineFeed:(NSError **)error;
 - (BOOL)isDownloadQueuedForMachine:(CMMachine *)machine;
+- (void)activateMachineIfInstalled:(CMMachine *)machine;
 
 - (NSArray *)machinesAvailableForDownload;
 - (void)synchronizeMachineArrayController;
@@ -171,6 +177,7 @@ static NSArray<NSString *> *sharedUserDefaultsToObserve;
 	NSArray *virtualEmulationSpeedRange;
 	
 	NSString *selectedKeyboardRegion;
+	NSString *selectedMacKeyboardLayout;
 	NSInteger selectedKeyboardShiftState;
 	
 	NSOperationQueue *downloadQueue;
@@ -265,6 +272,8 @@ extern CMEmulatorController *theEmulator;
     // Scope Bar
     [keyboardScopeBar setSelected:YES forItem:@(CMMSXKeyStateDefault)  inGroup:SCOPEBAR_GROUP_SHIFTED];
     [keyboardScopeBar setSelected:YES forItem:[CMMSXKeyboard defaultLayoutName] inGroup:SCOPEBAR_GROUP_REGIONS];
+    selectedMacKeyboardLayout = [CMMacKeyboardLayout effectiveLayoutIdentifier];
+    [keyboardScopeBar setSelected:YES forItem:selectedMacKeyboardLayout inGroup:SCOPEBAR_GROUP_MAC_LAYOUT];
     
     [self synchronizeSettings];
     
@@ -296,6 +305,13 @@ extern CMEmulatorController *theEmulator;
 	
     [machineScopeBar setSelected:YES forItem:@(machineFamilyFilter) inGroup:SCOPEBAR_GROUP_MACHINE_FAMILY];
     [machineScopeBar setSelected:YES forItem:@(machineStatusFilter) inGroup:SCOPEBAR_GROUP_MACHINE_STATUS];
+
+    [machinesTableView setDelegate:self];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(machineTableSelectionDidChange:)
+                                                 name:NSTableViewSelectionDidChangeNotification
+                                               object:machinesTableView];
     
     [self sizeWindowToTabContent:[[contentTabView selectedTabViewItem] identifier]];
     
@@ -327,6 +343,9 @@ extern CMEmulatorController *theEmulator;
     [[NSNotificationCenter defaultCenter] removeObserver:self
                                                     name:CMInstallErrorNotification
                                                   object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:NSTableViewSelectionDidChangeNotification
+                                                  object:machinesTableView];
 }
 
 #pragma mark - Private Methods
@@ -789,6 +808,50 @@ extern CMEmulatorController *theEmulator;
     return machineFound;
 }
 
+- (void)activateMachineIfInstalled:(CMMachine *)machine
+{
+    if (!machine || [machine status] != CMMachineInstalled)
+        return;
+
+    for (CMMachine *other in [machinesArrayController content])
+    {
+        if (other != machine && [other active])
+            [other setActive:NO];
+    }
+
+    if (![machine active])
+        [machine setActive:YES];
+
+    [self setActiveMachine:machine];
+    [machinesTableView reloadData];
+}
+
+- (IBAction)machineActiveRadioClicked:(id)sender
+{
+    NSInteger row = [machinesTableView clickedRow];
+    if (row < 0)
+        return;
+
+    NSArray *machines = [machinesArrayController arrangedObjects];
+    if (row >= (NSInteger)[machines count])
+        return;
+
+    [self activateMachineIfInstalled:[machines objectAtIndex:row]];
+}
+
+- (void)machineTableSelectionDidChange:(NSNotification *)notification
+{
+    NSInteger row = [machinesTableView selectedRow];
+    if (row < 0)
+        return;
+
+    NSArray *machines = [machinesArrayController arrangedObjects];
+    if (row >= (NSInteger)[machines count])
+        return;
+
+    [self activateMachineIfInstalled:[machines objectAtIndex:row]];
+}
+
 - (void)sizeWindowToTabContent:(NSString *)tabId
 {
     NSRect contentFrame = [[self window] contentRectForFrameRect:[[self window] frame]];
@@ -995,9 +1058,11 @@ extern CMEmulatorController *theEmulator;
 {
     CMInputDeviceLayout *layout = theEmulator.keyboardLayout;
     
-    [layout loadLayout:[[CMPreferences preferences] defaultKeyboardLayout]];
+    [layout loadLayout:[[CMPreferences preferences] defaultKeyboardLayoutForMacLayout:selectedMacKeyboardLayout]];
     [[CMPreferences preferences] setKeyboardLayout:layout];
     
+    [self initializeInputDeviceCategories:keyCategories
+                                 withLayout:layout];
     [keyboardLayoutEditor reloadData];
 }
 
@@ -1092,7 +1157,7 @@ extern CMEmulatorController *theEmulator;
         // deactivate all except the one active
         
         NSString *active = CMGetObjPref(@"machineConfiguration");
-        [_machines enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop)
+        [[machinesArrayController content] enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop)
         {
             BOOL matchesActive = [[obj machineId] isEqualToString:active];
             if (!matchesActive && [obj active])
@@ -1266,6 +1331,127 @@ extern CMEmulatorController *theEmulator;
     [self sizeWindowToTabContent:[tabViewItem identifier]];
 }
 
+#pragma mark - NSTableViewDelegate
+
+- (void)tableView:(NSTableView *)tableView
+  willDisplayCell:(id)cell
+forTableColumn:(NSTableColumn *)tableColumn
+            row:(NSInteger)row
+{
+    if (tableView != machinesTableView)
+        return;
+
+    BOOL selected = [tableView isRowSelected:row];
+    NSBackgroundStyle backgroundStyle = selected ? NSBackgroundStyleEmphasized : NSBackgroundStyleNormal;
+    [cell setBackgroundStyle:backgroundStyle];
+
+    if ([cell isKindOfClass:[CMMachineSelectionCell class]])
+    {
+        NSArray *machines = [machinesArrayController arrangedObjects];
+        if (row >= (NSInteger)[machines count])
+            return;
+
+        CMMachine *machine = [machines objectAtIndex:row];
+        NSButtonCell *buttonCell = (NSButtonCell *)cell;
+        CMMachineSelectionCell *selectionCell = (CMMachineSelectionCell *)cell;
+
+        [buttonCell setHighlighted:selected];
+        [buttonCell setBackgroundStyle:backgroundStyle];
+        [buttonCell setTarget:self];
+        [buttonCell setAction:@selector(machineActiveRadioClicked:)];
+        [buttonCell setAlignment:NSCenterTextAlignment];
+        [buttonCell setImage:nil];
+        [buttonCell setImagePosition:NSNoImage];
+        [buttonCell setEnabled:[machine status] == CMMachineInstalled];
+
+        if ([machine status] == CMMachineDownloading)
+        {
+            [selectionCell setDownloadingIconVisible:YES];
+            [buttonCell setTitle:@""];
+            return;
+        }
+
+        [selectionCell setDownloadingIconVisible:NO];
+
+        NSString *indicator = @"";
+        if ([machine status] == CMMachineInstalled)
+            indicator = [machine active] ? @"✓" : @"○";
+
+        NSColor *indicatorColor;
+        if (selected)
+            indicatorColor = [NSColor alternateSelectedControlTextColor];
+        else if ([machine active])
+            indicatorColor = [NSColor controlAccentColor];
+        else
+            indicatorColor = [NSColor secondaryLabelColor];
+
+        NSDictionary *attributes = @{
+            NSFontAttributeName: [NSFont boldSystemFontOfSize:15],
+            NSForegroundColorAttributeName: indicatorColor,
+        };
+        [buttonCell setAttributedTitle:[[NSAttributedString alloc] initWithString:indicator
+                                                                       attributes:attributes]];
+        return;
+    }
+
+    if (![cell isKindOfClass:[CMMachineCell class]])
+        return;
+
+    CMMachine *machine = [[machinesArrayController arrangedObjects] objectAtIndex:row];
+    if (![machine isKindOfClass:[CMMachine class]])
+        return;
+
+    NSTextFieldCell *textCell = (NSTextFieldCell *)cell;
+    [textCell setDrawsBackground:NO];
+    [textCell setUsesSingleLineMode:NO];
+    [textCell setScrollable:NO];
+
+    __block NSAttributedString *displayString = nil;
+    [[tableView effectiveAppearance] performAsCurrentDrawingAppearance:^{
+        NSColor *titleColor;
+        NSColor *subtitleColor;
+
+        if (selected)
+        {
+            titleColor = [NSColor alternateSelectedControlTextColor];
+            subtitleColor = titleColor;
+        }
+        else if ([machine status] != CMMachineInstalled)
+        {
+            titleColor = [NSColor tertiaryLabelColor];
+            subtitleColor = titleColor;
+        }
+        else
+        {
+            titleColor = [NSColor labelColor];
+            subtitleColor = [NSColor secondaryLabelColor];
+        }
+
+        NSString *name = [machine name] ?: @"";
+        NSString *system = [machine systemName] ?: @"";
+
+        NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] init];
+        [attr appendAttributedString:[[NSAttributedString alloc] initWithString:name
+                                                                    attributes:@{
+            NSFontAttributeName: [NSFont systemFontOfSize:[NSFont systemFontSize]],
+            NSForegroundColorAttributeName: titleColor,
+        }]];
+
+        if ([system length] > 0)
+        {
+            [attr appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"\n%@", system]
+                                                                        attributes:@{
+                NSFontAttributeName: [NSFont systemFontOfSize:[NSFont smallSystemFontSize]],
+                NSForegroundColorAttributeName: subtitleColor,
+            }]];
+        }
+
+        displayString = attr;
+    }];
+
+    [textCell setAttributedStringValue:displayString];
+}
+
 #pragma mark - NSOutlineViewDataSourceDelegate
 
 - (NSInteger) outlineView:(NSOutlineView *) outlineView
@@ -1312,15 +1498,28 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
         if ([[tableColumn identifier] isEqualToString:@"CMKeyLabelColumn"]) {
 			CMMSXKeyboard *keyboard = [CMMSXKeyboard keyboardWithLayoutName:selectedKeyboardRegion];
 			if (keyboard) {
-				NSString *label = [keyboard presentationLabelForVirtualCode:virtualCode
-																   keyState:selectedKeyboardShiftState];
+				NSString *label = [keyboard fullPresentationLabelForVirtualCode:virtualCode];
+				if (!label)
+					label = [keyboard presentationLabelForVirtualCode:virtualCode
+															   keyState:selectedKeyboardShiftState];
 				return label ? label : CMLoc(@"Unavailable", @"");
 			}
 			
             return nil;
         } else if ([[tableColumn identifier] isEqualToString:@"CMKeyAssignmentColumn"]) {
             CMKeyboardInput *keyInput = (CMKeyboardInput *)[[theEmulator keyboardLayout] inputMethodForVirtualCode:virtualCode];
-            return [CMKeyCaptureView descriptionForKeyCode:[keyInput keyCode]];
+            if (!keyInput || [keyInput keyCode] == CMKeyNoCode)
+                return @"";
+
+            NSString *keyName = [CMKeyCaptureView descriptionForKeyCode:[keyInput keyCode]];
+            NSUInteger macModifiers = selectedKeyboardShiftState == CMMSXKeyStateShift ? NSEventModifierFlagShift : 0;
+            NSString *macLayout = selectedMacKeyboardLayout ?: [CMMacKeyboardLayout effectiveLayoutIdentifier];
+            NSString *macChar = [CMMacKeyboardLayout displayLabelForKeyCode:[keyInput keyCode]
+                                                                   modifiers:macModifiers
+                                                          layoutIdentifier:macLayout];
+            if ([macChar length] > 0 && [keyName length] > 0 && ![macChar isEqualToString:keyName])
+                return [NSString stringWithFormat:@"%@ (%@)", keyName, macChar];
+            return keyName;
         }
     }
     
@@ -1402,7 +1601,7 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
 - (int)numberOfGroupsInScopeBar:(MGScopeBar *)theScopeBar
 {
     if (theScopeBar == keyboardScopeBar)
-        return 2;
+        return 3;
     
     if (theScopeBar == machineScopeBar)
         return 2;
@@ -1423,6 +1622,10 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
         else if (groupNumber == SCOPEBAR_GROUP_REGIONS)
         {
             return [CMMSXKeyboard availableLayoutNames];
+        }
+        else if (groupNumber == SCOPEBAR_GROUP_MAC_LAYOUT)
+        {
+            return [CMMacKeyboardLayout availableLayoutIdentifiers];
         }
     }
     else if (theScopeBar == machineScopeBar)
@@ -1449,7 +1652,9 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
     if (theScopeBar == keyboardScopeBar)
     {
         if (groupNumber == SCOPEBAR_GROUP_REGIONS)
-            return CMLoc(@"Layout", @"");
+            return CMLoc(@"MSX", @"MSX keyboard layout");
+        if (groupNumber == SCOPEBAR_GROUP_MAC_LAYOUT)
+            return CMLoc(@"Mac", @"Mac keyboard layout");
     }
     
     return nil;
@@ -1476,6 +1681,10 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
         else if (groupNumber == SCOPEBAR_GROUP_REGIONS)
         {
             return [[CMMSXKeyboard keyboardWithLayoutName:identifier] label];
+        }
+        else if (groupNumber == SCOPEBAR_GROUP_MAC_LAYOUT)
+        {
+            return [CMMacKeyboardLayout labelForLayoutIdentifier:identifier];
         }
     }
     else if (theScopeBar == machineScopeBar)
@@ -1524,6 +1733,12 @@ objectValueForTableColumn:(NSTableColumn *) tableColumn
         {
             selectedKeyboardRegion = identifier;
             
+            [keyboardLayoutEditor reloadData];
+        }
+        else if (groupNumber == SCOPEBAR_GROUP_MAC_LAYOUT)
+        {
+            selectedMacKeyboardLayout = identifier;
+            [[NSUserDefaults standardUserDefaults] setObject:identifier forKey:CMMacKeyboardLayoutPrefKey];
             [keyboardLayoutEditor reloadData];
         }
     }

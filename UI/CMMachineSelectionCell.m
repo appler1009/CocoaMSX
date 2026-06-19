@@ -22,49 +22,58 @@
  */
 #import "CMMachineSelectionCell.h"
 
+static BOOL CMIsDarkAppearance(NSView *view)
+{
+    NSString *match = [[view effectiveAppearance] bestMatchFromAppearancesWithNames:@[
+        NSAppearanceNameAqua,
+        NSAppearanceNameDarkAqua,
+    ]];
+    return [match isEqualToString:NSAppearanceNameDarkAqua];
+}
+
 @implementation CMMachineSelectionCell
+
+- (BOOL)isRowHighlightedInView:(NSView *)controlView frame:(NSRect)cellFrame
+{
+    if (![controlView isKindOfClass:[NSTableView class]])
+        return NO;
+
+    NSTableView *tableView = (NSTableView *)controlView;
+    NSInteger cellRow = [tableView rowAtPoint:cellFrame.origin];
+    return [tableView isRowSelected:cellRow];
+}
 
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(NSView *)controlView
 {
-    [super drawInteriorWithFrame:cellFrame inView:controlView];
-    
-    if ([self downloadingIconVisible])
-    {
-        NSImage *downloadIcon;
-        
-        BOOL isHighlighted = NO;
-        
-        // This is hacky, but NSButtonCell's notion of isHighlighted
-        // isn't what we need. To figure out whether the cell's row is
-        // selected, we look at whether the cell resides on one of the
-        // selected rows
-        
-        if ([controlView isKindOfClass:[NSTableView class]])
-        {
-            NSTableView *tableView = (NSTableView *)controlView;
-            NSInteger cellRow = [tableView rowAtPoint:cellFrame.origin];
-            isHighlighted = [tableView isRowSelected:cellRow];
-        }
-        
-        if (isHighlighted)
-            downloadIcon = [NSImage imageNamed:@"icon-downloading-inverse"];
-        else
-            downloadIcon = [NSImage imageNamed:@"icon-downloading"];
-        
-        [controlView lockFocus];
-        
+    [[controlView effectiveAppearance] performAsCurrentDrawingAppearance:^{
+        [super drawInteriorWithFrame:cellFrame inView:controlView];
+    }];
+
+    if (![self downloadingIconVisible])
+        return;
+
+    BOOL isHighlighted = [self isRowHighlightedInView:controlView frame:cellFrame];
+    NSImage *downloadIcon;
+
+    if (isHighlighted || CMIsDarkAppearance(controlView))
+        downloadIcon = [NSImage imageNamed:@"icon-downloading-inverse"];
+    else
+        downloadIcon = [NSImage imageNamed:@"icon-downloading"];
+
+    if (!downloadIcon)
+        return;
+
+    [[controlView effectiveAppearance] performAsCurrentDrawingAppearance:^{
         [downloadIcon drawInRect:NSMakeRect(cellFrame.origin.x + (cellFrame.size.width - downloadIcon.size.width) / 2.0,
-                                            cellFrame.origin.y + (cellFrame.size.height - downloadIcon.size.height) / 2.0,
-                                            downloadIcon.size.width,
-                                            downloadIcon.size.height)
+                                          cellFrame.origin.y + (cellFrame.size.height - downloadIcon.size.height) / 2.0,
+                                          downloadIcon.size.width,
+                                          downloadIcon.size.height)
                         fromRect:NSMakeRect(0, 0, downloadIcon.size.width, downloadIcon.size.height)
                        operation:NSCompositeSourceOver
                         fraction:1.0
                   respectFlipped:YES
                            hints:nil];
-        
-        [controlView unlockFocus];
-    }
+    }];
 }
 
 @end

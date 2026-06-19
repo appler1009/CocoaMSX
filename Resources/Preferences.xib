@@ -22,6 +22,7 @@
                 <outlet property="machineScopeBar" destination="PgO-iz-9VP" id="pGR-Jh-oj5"/>
                 <outlet property="machineSearchField" destination="H9z-H5-1n2" id="59G-Dt-rZE"/>
                 <outlet property="machinesArrayController" destination="mqW-Wf-8nz" id="LlH-C4-Lvl"/>
+                <outlet property="machinesTableView" destination="a7i-vw-LLh" id="mTv-0k-Sys"/>
                 <outlet property="peripheralOneTabView" destination="3877" id="5bc-rA-jGU"/>
                 <outlet property="peripheralTwoTabView" destination="3883" id="1Q4-74-ALG"/>
                 <outlet property="saturationSlider" destination="217" id="318"/>
@@ -181,7 +182,7 @@
                                                 <rect key="frame" x="1" y="0.0" width="556" height="289"/>
                                                 <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                 <subviews>
-                                                    <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" columnAutoresizingStyle="lastColumnOnly" multipleSelection="NO" autosaveColumns="NO" rowHeight="32" headerView="oMQ-mL-1i6" id="a7i-vw-LLh">
+                                                    <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" columnAutoresizingStyle="lastColumnOnly" alternatingRowBackgroundColors="YES" multipleSelection="NO" autosaveColumns="NO" rowHeight="32" headerView="oMQ-mL-1i6" id="a7i-vw-LLh">
                                                         <rect key="frame" x="0.0" y="0.0" width="556" height="272"/>
                                                         <autoresizingMask key="autoresizingMask"/>
                                                         <size key="intercellSpacing" width="3" height="2"/>
@@ -192,10 +193,10 @@
                                                                 <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="center" title="Active">
                                                                     <font key="font" metaFont="smallSystem"/>
                                                                     <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
-                                                                    <color key="backgroundColor" white="0.33333298560000002" alpha="1" colorSpace="calibratedWhite"/>
+                                                                    <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
                                                                 </tableHeaderCell>
                                                                 <buttonCell key="dataCell" type="radio" bezelStyle="regularSquare" imagePosition="overlaps" alignment="left" inset="2" id="HQz-9B-eoI" customClass="CMMachineSelectionCell">
-                                                                    <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                                                    <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByGray="YES"/>
                                                                     <font key="font" metaFont="system"/>
                                                                 </buttonCell>
                                                                 <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
@@ -212,12 +213,12 @@
                                                                 <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="System">
                                                                     <font key="font" metaFont="smallSystem"/>
                                                                     <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
-                                                                    <color key="backgroundColor" white="0.33333298560000002" alpha="1" colorSpace="calibratedWhite"/>
+                                                                    <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
                                                                 </tableHeaderCell>
                                                                 <textFieldCell key="dataCell" lineBreakMode="truncatingTail" selectable="YES" editable="YES" sendsActionOnEndEditing="YES" id="a97-tT-CU9" customClass="CMMachineCell">
                                                                     <font key="font" metaFont="system"/>
-                                                                    <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
-                                                                    <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                                                                    <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                                                    <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
                                                                 </textFieldCell>
                                                                 <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
                                                                 <connections>

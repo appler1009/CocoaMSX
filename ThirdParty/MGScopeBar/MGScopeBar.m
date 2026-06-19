@@ -168,7 +168,7 @@
 					[labelField setEditable:NO];
 					[labelField setBordered:NO];
 					[labelField setDrawsBackground:NO];
-					[labelField setTextColor:SCOPE_BAR_LABEL_COLOR];
+					[labelField setTextColor:[NSColor secondaryLabelColor]];
 					[labelField setFont:[NSFont boldSystemFontOfSize:SCOPE_BAR_FONTSIZE]];
 					[labelField sizeToFit];
 					ctrlRect.size = [labelField frame].size;
@@ -855,34 +855,34 @@
 
 - (void)drawRect:(NSRect)rect
 {
-    // Draw gradient background.
-	NSGradient *gradient = [[NSGradient alloc] initWithStartingColor:SCOPE_BAR_START_COLOR_GRAY 
-														  endingColor:SCOPE_BAR_END_COLOR_GRAY];
-	[gradient drawInRect:[self bounds] angle:90.0];
-	
-	NSRect lineRect = [self bounds];
-    
-	// Draw border.
-    NSBezierPath *path = [NSBezierPath bezierPathWithRect:lineRect];
-	[[NSColor controlShadowColor] set];
-	[path stroke];
-    
-	lineRect.size.height = SCOPE_BAR_BORDER_WIDTH;
-	[SCOPE_BAR_BORDER_COLOR set];
-	NSRectFill(lineRect);
-	
-	// Draw separators.
-	if ([_separatorPositions count] > 0) {
-		[SCOPE_BAR_SEPARATOR_COLOR set];
-		NSRect sepRect = NSMakeRect(0, 0, SCOPE_BAR_SEPARATOR_WIDTH, SCOPE_BAR_SEPARATOR_HEIGHT);
-		sepRect.origin.y = (([self bounds].size.height - sepRect.size.height) / 2.0);
-		for (NSObject *sepPosn in _separatorPositions) {
-			if (sepPosn != [NSNull null]) {
-				sepRect.origin.x = [(NSNumber *)sepPosn intValue];
-				NSRectFill(sepRect);
-			}
-		}
-	}
+    [[self effectiveAppearance] performAsCurrentDrawingAppearance:^{
+        NSColor *startColor = [NSColor controlBackgroundColor];
+        NSColor *endColor = [[NSColor controlBackgroundColor] highlightWithLevel:0.15];
+        NSGradient *gradient = [[NSGradient alloc] initWithStartingColor:startColor endingColor:endColor];
+        [gradient drawInRect:[self bounds] angle:90.0];
+
+        NSRect lineRect = [self bounds];
+
+        NSBezierPath *path = [NSBezierPath bezierPathWithRect:lineRect];
+        [[NSColor separatorColor] set];
+        [path stroke];
+
+        lineRect.size.height = SCOPE_BAR_BORDER_WIDTH;
+        [[NSColor separatorColor] set];
+        NSRectFill(lineRect);
+
+        if ([_separatorPositions count] > 0) {
+            [[NSColor separatorColor] set];
+            NSRect sepRect = NSMakeRect(0, 0, SCOPE_BAR_SEPARATOR_WIDTH, SCOPE_BAR_SEPARATOR_HEIGHT);
+            sepRect.origin.y = (([self bounds].size.height - sepRect.size.height) / 2.0);
+            for (NSObject *sepPosn in _separatorPositions) {
+                if (sepPosn != [NSNull null]) {
+                    sepRect.origin.x = [(NSNumber *)sepPosn intValue];
+                    NSRectFill(sepRect);
+                }
+            }
+        }
+    }];
 }
 
 

@@ -32,7 +32,7 @@
 @class CMKeyCaptureView;
 @class CMMachine;
 
-@interface CMPreferenceController : NSWindowController<NSWindowDelegate, NSToolbarDelegate, NSTabViewDelegate, NSOutlineViewDataSource, NSOutlineViewDelegate, MGScopeBarDelegate, CMGamepadConfigurationDelegate, CMKeyboardEventDelegate>
+@interface CMPreferenceController : NSWindowController<NSWindowDelegate, NSToolbarDelegate, NSTabViewDelegate, NSTableViewDelegate, NSOutlineViewDataSource, NSOutlineViewDelegate, MGScopeBarDelegate, CMGamepadConfigurationDelegate, CMKeyboardEventDelegate>
 {
     IBOutlet NSButton *configureJoypadOneButton;
     IBOutlet NSButton *configureJoypadTwoButton;
@@ -59,6 +59,7 @@
     
     IBOutlet NSArrayController *machinesArrayController;
     IBOutlet NSArrayController *channelsArrayController;
+    IBOutlet NSTableView *machinesTableView;
 
     IBOutlet NSSlider *emulationSpeedSlider;
     IBOutlet NSSearchField *machineSearchField;

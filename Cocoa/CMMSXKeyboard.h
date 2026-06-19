@@ -63,6 +63,7 @@ typedef NSUInteger CMMSXKeyState;
 
 - (NSString *)presentationLabelForVirtualCode:(NSInteger)keyCode
                                      keyState:(CMMSXKeyState)keyState;
+- (NSString *)fullPresentationLabelForVirtualCode:(NSInteger)keyCode;
 
 - (BOOL)supportsVirtualCode:(NSInteger)keyCode
                    forState:(CMMSXKeyState)keyState;

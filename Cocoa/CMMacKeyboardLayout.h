@@ -20,8 +20,28 @@
  **
  ******************************************************************************
  */
-#import "CMMachineCell.h"
+#import <Foundation/Foundation.h>
 
-@implementation CMMachineCell
+extern NSString * const CMMacKeyboardLayoutPrefKey;
+
+extern NSString * const CMMacKeyboardLayoutUSIdentifier;
+extern NSString * const CMMacKeyboardLayoutCanadianIdentifier;
+
+@interface CMMacKeyboardLayout : NSObject
+
++ (NSArray<NSString *> *)availableLayoutIdentifiers;
++ (NSString *)labelForLayoutIdentifier:(NSString *)identifier;
++ (NSString *)effectiveLayoutIdentifier;
++ (NSString *)inputSourceIDForLayoutIdentifier:(NSString *)identifier;
+
++ (NSString *)characterForKeyCode:(NSUInteger)keyCode
+                        modifiers:(NSUInteger)modifierFlags
+               layoutIdentifier:(NSString *)layoutIdentifier;
+
++ (NSString *)displayLabelForKeyCode:(NSUInteger)keyCode
+                           modifiers:(NSUInteger)modifierFlags
+                  layoutIdentifier:(NSString *)layoutIdentifier;
+
++ (BOOL)isCharacterMappingPreferredForKeyCode:(NSUInteger)keyCode;
 
 @end

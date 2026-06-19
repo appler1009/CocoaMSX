@@ -68,6 +68,8 @@
 #define LED_CASSETTE  0x100
 #define LED_POWER     0x200
 
+static const NSInteger kCMPersistedFloppyDriveCount = 2;
+
 @interface CMEmulatorController ()
 
 - (CMAppDelegate *)theApp;
@@ -104,6 +106,11 @@
                    allowedFileTypes:(NSArray*)allowedFileTypes
                     openInDirectory:(NSString*)initialDirectory
                   completionHandler:(void (^)(NSString *file, NSString *path))handler;
+- (void)showSaveFileDialogWithTitle:(NSString*)title
+                   allowedFileTypes:(NSArray*)allowedFileTypes
+                    openInDirectory:(NSString*)initialDirectory
+                    defaultFilename:(NSString*)defaultFilename
+                  completionHandler:(void (^)(NSString *file, NSString *path))handler;
 
 - (void) startWithState:(NSString *) state;
 
@@ -125,6 +132,8 @@
                     slot:(NSInteger)slot
           mountFoldersRw:(BOOL)mountFoldersRw;
 - (void)ejectDiskFromSlot:(NSInteger)slot;
+- (void)persistDiskForSlot:(NSInteger)slot;
+- (void)restorePersistedDiskPaths;
 - (BOOL)toggleEjectDiskMenuItemStatus:(NSMenuItem*)menuItem
                                  slot:(NSInteger)slot;
 
@@ -553,6 +562,8 @@ CMEmulatorController *theEmulator = nil; // FIXME
                               properties->media.carts[i].fileNameInZip);
     }
     
+    [self restorePersistedDiskPaths];
+
     for (int i = 0; i < PROP_MAX_DISKS; i++)
     {
         if (properties->media.disks[i].fileName[0])
@@ -1172,12 +1183,26 @@ CMEmulatorController *theEmulator = nil; // FIXME
     [self showSaveFileDialogWithTitle:title
                      allowedFileTypes:allowedFileTypes
                       openInDirectory:nil
+                      defaultFilename:nil
                     completionHandler:handler];
 }
 
 - (void)showSaveFileDialogWithTitle:(NSString*)title
                    allowedFileTypes:(NSArray*)allowedFileTypes
                     openInDirectory:(NSString*)initialDirectory
+                  completionHandler:(void (^)(NSString *file, NSString *path))handler
+{
+    [self showSaveFileDialogWithTitle:title
+                     allowedFileTypes:allowedFileTypes
+                      openInDirectory:initialDirectory
+                      defaultFilename:nil
+                    completionHandler:handler];
+}
+
+- (void)showSaveFileDialogWithTitle:(NSString*)title
+                   allowedFileTypes:(NSArray*)allowedFileTypes
+                    openInDirectory:(NSString*)initialDirectory
+                    defaultFilename:(NSString*)defaultFilename
                   completionHandler:(void (^)(NSString *file, NSString *path))handler
 {
     NSSavePanel *dialog = [NSSavePanel savePanel];
@@ -1188,6 +1213,9 @@ CMEmulatorController *theEmulator = nil; // FIXME
     
     if (initialDirectory)
         dialog.directoryURL = [NSURL fileURLWithPath:initialDirectory];
+    
+    if (defaultFilename.length > 0)
+        dialog.nameFieldStringValue = defaultFilename;
     
     [dialog beginSheetModalForWindow:[self activeWindow]
                    completionHandler:^(NSInteger result)
@@ -1493,6 +1521,8 @@ CMEmulatorController *theEmulator = nil; // FIXME
         [self setLastLoadedState:nil];
         [self setLastSavedState:nil];
     }
+
+    [self persistDiskForSlot:slot];
 }
 
 - (void)createBlankDiskAndInsertIntoSlot:(int)slot
@@ -1582,13 +1612,70 @@ CMEmulatorController *theEmulator = nil; // FIXME
 - (void)ejectDiskFromSlot:(NSInteger)slot
 {
     actionDiskRemove(slot);
-	
+    [self persistDiskForSlot:slot];
+
     // If the user is ejecting a disk from the first slot, reset last used
     // state names
     if (slot == 0)
     {
         [self setLastLoadedState:nil];
         [self setLastSavedState:nil];
+    }
+}
+
+- (NSString *)persistedDiskPathKeyForSlot:(NSInteger)slot
+{
+    return [NSString stringWithFormat:@"persistedDisk%ldPath", (long)slot];
+}
+
+- (NSString *)persistedDiskPathInZipKeyForSlot:(NSInteger)slot
+{
+    return [NSString stringWithFormat:@"persistedDisk%ldPathInZip", (long)slot];
+}
+
+- (void)persistDiskForSlot:(NSInteger)slot
+{
+    if (slot < 0 || slot >= kCMPersistedFloppyDriveCount || !properties)
+        return;
+
+    NSString *pathKey = [self persistedDiskPathKeyForSlot:slot];
+    NSString *zipKey = [self persistedDiskPathInZipKeyForSlot:slot];
+    FileProperties *disk = &properties->media.disks[slot];
+
+    if (disk->fileName[0]) {
+        CMSetObjPref(pathKey, @(disk->fileName));
+        if (disk->fileNameInZip[0])
+            CMSetObjPref(zipKey, @(disk->fileNameInZip));
+        else
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:zipKey];
+    } else {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:pathKey];
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:zipKey];
+    }
+}
+
+- (void)restorePersistedDiskPaths
+{
+    if (!properties)
+        return;
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    for (NSInteger slot = 0; slot < kCMPersistedFloppyDriveCount; slot++) {
+        if (properties->media.disks[slot].fileName[0])
+            continue;
+
+        NSString *path = CMGetObjPref([self persistedDiskPathKeyForSlot:slot]);
+        if (![path isKindOfClass:[NSString class]] || path.length == 0)
+            continue;
+        if (![fm fileExistsAtPath:path])
+            continue;
+
+        strcpy(properties->media.disks[slot].fileName, [path UTF8String]);
+
+        NSString *pathInZip = CMGetObjPref([self persistedDiskPathInZipKeyForSlot:slot]);
+        if ([pathInZip isKindOfClass:[NSString class]] && pathInZip.length > 0)
+            strcpy(properties->media.disks[slot].fileNameInZip, [pathInZip UTF8String]);
     }
 }
 
@@ -2396,8 +2483,15 @@ CMEmulatorController *theEmulator = nil; // FIXME
     
     emulatorSuspend();
     
+    NSString *desktopPath = [NSSearchPathForDirectoriesInDomains(NSDesktopDirectory, NSUserDomainMask, YES) firstObject];
+    NSString *defaultPath = [self generateTimestampedFilenameAtPath:desktopPath
+                                                           template:NSLocalizedString(@"ScreenshotFilenameFormat", @"")
+                                                          extension:@"png"];
+    
     [self showSaveFileDialogWithTitle:CMLoc(@"Save Screenshot", @"Dialog title")
                      allowedFileTypes:[NSArray arrayWithObjects:@"png", nil]
+                      openInDirectory:desktopPath
+                      defaultFilename:[defaultPath lastPathComponent]
                     completionHandler:^(NSString *file, NSString *path)
      {
          if (file)
@@ -3001,21 +3095,14 @@ void archTrap(UInt8 value)
 
 - (void) togglePresentationOptions
 {
-	NSApplicationPresentationOptions options = [NSApp presentationOptions];
-	if (!(options & NSApplicationPresentationAutoHideDock) && !(options & NSApplicationPresentationHideDock)) {
-		options |= NSApplicationPresentationAutoHideDock;
-	}
-	
-	if ([[self window] isKeyWindow]) {
-		options |= NSApplicationPresentationDisableProcessSwitching;
-		NSLog(@"EmulatorController: disabling process switching");
-	} else {
-		options &= ~NSApplicationPresentationDisableProcessSwitching;
-		NSLog(@"EmulatorController: enabling process switching");
-	}
-	
+	// Do not set NSApplicationPresentationDisableProcessSwitching while the
+	// emulator is focused. Apple's kiosk docs state that flag disables all
+	// Exposé functionality, including Mission Control and Spaces gestures.
+	if ([[self window] isKeyWindow])
+		return;
+
 	@try {
-		[NSApp setPresentationOptions:options];
+		[NSApp setPresentationOptions:NSApplicationPresentationDefault];
 	}
 	@catch(NSException * exception) {
 		NSLog(@"[NSApp setPresentationOptions] failed");

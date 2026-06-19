@@ -36,6 +36,7 @@
 - (void)setKeyboardLayout:(CMInputDeviceLayout *)keyboardLayout;
 
 - (CMInputDeviceLayout *)defaultKeyboardLayout;
+- (CMInputDeviceLayout *)defaultKeyboardLayoutForMacLayout:(NSString *)macLayoutIdentifier;
 - (CMInputDeviceLayout *)defaultJoystickOneLayout;
 - (CMInputDeviceLayout *)defaultJoystickTwoLayout;
 
